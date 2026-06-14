@@ -9,7 +9,7 @@ test.describe('RBAC — Role Based Access Control', () => {
    * Helper: register and login a new reader user via UI.
    */
   async function loginAsNewReader(page: import('@playwright/test').Page) {
-    const uniqueEmail = `rbac_reader_${Date.now()}@test.com`;
+    const uniqueEmail = `rbac_reader_${Date.now()}@munshinavid.me`;
     const password = 'Reader@123456';
 
     await page.request.post(`${API_BASE}/api/Auth/register`, {

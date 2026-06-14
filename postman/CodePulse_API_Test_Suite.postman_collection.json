@@ -69,7 +69,7 @@
 							"listen": "prerequest",
 							"script": {
 								"exec": [
-									"pm.variables.set('reader_email', 'reader_' + Date.now() + '@test.com');"
+									"pm.variables.set('reader_email', 'reader_' + Date.now() + '@munshinavid.me');"
 								],
 								"type": "text/javascript"
 							}
@@ -295,7 +295,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"nonexistent@test.com\",\n    \"password\": \"wrongpassword\"\n}"
+							"raw": "{\n    \"email\": \"nonexistent@munshinavid.me\",\n    \"password\": \"wrongpassword\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/Auth/login",
@@ -740,7 +740,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"title\": \"Getting Started with Angular 18\",\n    \"content\": \"Angular 18 introduces a host of powerful features including signal-based components, improved SSR with hydration, and a new control flow syntax. This comprehensive guide walks you through setting up your first Angular 18 project with best practices for modern web development.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"A comprehensive guide to building modern web apps with Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://example.com/images/angular-18.jpg\",\n    \"urlHandle\": \"getting-started-with-angular-18\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
+							"raw": "{\n    \"title\": \"Getting Started with Angular 18\",\n    \"content\": \"Angular 18 introduces a host of powerful features including signal-based components, improved SSR with hydration, and a new control flow syntax. This comprehensive guide walks you through setting up your first Angular 18 project with best practices for modern web development.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"A comprehensive guide to building modern web apps with Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://api.blog.munshinavid.me/images/angular-18.jpg\",\n    \"urlHandle\": \"getting-started-with-angular-18\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/BlogPosts",
@@ -996,7 +996,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"title\": \"Angular 18 — The Complete Developer Guide\",\n    \"content\": \"Updated content with new sections on signals, deferrable views, and the built-in control flow. Angular 18 brings a paradigm shift in how we build reactive applications.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Updated comprehensive guide to Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://example.com/images/angular-18-v2.jpg\",\n    \"urlHandle\": \"angular-18-complete-guide\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
+							"raw": "{\n    \"title\": \"Angular 18 — The Complete Developer Guide\",\n    \"content\": \"Updated content with new sections on signals, deferrable views, and the built-in control flow. Angular 18 brings a paradigm shift in how we build reactive applications.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Updated comprehensive guide to Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://api.blog.munshinavid.me/images/angular-18-v2.jpg\",\n    \"urlHandle\": \"angular-18-complete-guide\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
@@ -2577,7 +2577,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n    \"email\": \"test@example.com\"\n}"
+							"raw": "{\n    \"email\": \"validation_missing_password@munshinavid.me\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/Auth/register",

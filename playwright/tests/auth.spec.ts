@@ -21,7 +21,7 @@ test.describe('Authentication', () => {
 
   test('Valid reader login → home page visible', async ({ page }) => {
     // First register a unique reader
-    const uniqueEmail = `reader_${Date.now()}@test.com`;
+    const uniqueEmail = `reader_${Date.now()}@munshinavid.me`;
     const password = 'Reader@123456';
 
     // Register via API
@@ -45,7 +45,7 @@ test.describe('Authentication', () => {
   test('Invalid credentials → error message visible', async ({ page }) => {
     const loginPage = new LoginPage(page);
     await loginPage.goto();
-    await loginPage.login('nonexistent@test.com', 'wrongpassword');
+    await loginPage.login('nonexistent@munshinavid.me', 'wrongpassword');
 
     await loginPage.expectErrorVisible();
     await loginPage.expectErrorContains('Invalid email or password');

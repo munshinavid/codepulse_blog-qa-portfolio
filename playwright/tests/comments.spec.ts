@@ -7,7 +7,7 @@ test.describe('Comments', () => {
   const API_BASE = 'https://api.blog.munshinavid.me';
 
   test('Login as reader → add comment on first post → comment appears', async ({ page }) => {
-    const uniqueEmail = `commenter_${Date.now()}@test.com`;
+    const uniqueEmail = `commenter_${Date.now()}@munshinavid.me`;
     const password = 'Reader@123456';
     const commentText = `Playwright comment ${Date.now()}`;
 
@@ -38,7 +38,7 @@ test.describe('Comments', () => {
   });
 
   test('Delete own comment → comment removed from list', async ({ page }) => {
-    const uniqueEmail = `delcomment_${Date.now()}@test.com`;
+    const uniqueEmail = `delcomment_${Date.now()}@munshinavid.me`;
     const password = 'Reader@123456';
     const commentText = `Delete me ${Date.now()}`;
 
@@ -92,6 +92,6 @@ test.describe('Comments', () => {
       // Wait for the error message to appear
       await expect(postPage.commentSubmitError).toBeVisible({ timeout: 10_000 });
     }
-    // If textarea is not visible, that's also acceptable (UI blocks unauthenticated users)
+    
   });
 });

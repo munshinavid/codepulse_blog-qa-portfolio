@@ -1,0 +1,40 @@
+name: API Tests (Newman)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  api-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Newman and HTML reporter
+        run: npm install -g newman newman-reporter-htmlextra
+
+      - name: Run Newman API tests
+        run: |
+          newman run postman/CodePulse_API_Test_Suite.postman_collection.json \
+            --env-var "base_url=https://api.blog.munshinavid.me" \
+            --delay-request 200 \
+            --reporters cli,htmlextra \
+            --reporter-htmlextra-export ./newman-report.html \
+            --suppress-exit-code
+
+      - name: Upload Newman report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newman-report
+          path: newman-report.html
+          retention-days: 30
