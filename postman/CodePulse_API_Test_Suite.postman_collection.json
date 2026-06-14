@@ -1,0 +1,3127 @@
+{
+	"info": {
+		"_postman_id": "codepulse-api-test-suite-v1",
+		"name": "CodePulse API Test Suite",
+		"description": "Production-accurate test suite for the CodePulse Blog Platform API.\n\nJWT is stored in HttpOnly cookies (cookie name: `jwtToken`). Postman's cookie jar handles this automatically when requests are sent with the same domain.\n\nSeeded Admin: admin@myblog.com / 1234\nIdentity password policy: min 6 chars, no complexity requirements.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://api.blog.munshinavid.me",
+			"type": "string"
+		},
+		{
+			"key": "admin_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "reader_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "post_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "category_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "image_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "comment_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "reader_user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "admin_user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "reader_email",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Auth",
+			"description": "Authentication endpoints: Register, Login (Admin & Reader), Logout, and Get Current User.\n\nJWT is set as an HttpOnly cookie named `jwtToken` with SameSite=None, Secure=true.\nCookie expires in 15 minutes (set by controller), token itself is valid for 60 minutes (set by TokenService).",
+			"item": [
+				{
+					"name": "Register — New Reader User",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"pm.variables.set('reader_email', 'reader_' + Date.now() + '@test.com');"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response confirms successful registration', function () {",
+									"    var body = pm.response.text();",
+									"    pm.expect(body).to.include('User registered successfully');",
+									"    pm.expect(body).to.include('Now you can login');",
+									"});",
+									"",
+									"// Persist the generated email for downstream requests",
+									"pm.collectionVariables.set('reader_email', pm.variables.get('reader_email'));"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{reader_email}}\",\n    \"password\": \"Reader@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						},
+						"description": "POST /api/Auth/register\n\nRegisters a new user with the \"Reader\" role (default).\nEmail is dynamically generated via pre-request script for idempotent runs.\n\nDTO: RegisterRequestDto\n- Email [Required]\n- Password [Required]\n\nIdentity password policy: min 6 chars, no digit/uppercase/lowercase/special char requirements."
+					}
+				},
+				{
+					"name": "Register — Duplicate Email (Expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Response contains identity error about duplicate', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(JSON.stringify(json)).to.include('DuplicateUserName');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// This test assumes the previous Register request ran first,",
+									"// so {{reader_email}} already exists."
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{reader_email}}\",\n    \"password\": \"Reader@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Login — As Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains email and roles', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('email');",
+									"    pm.expect(json).to.have.property('roles');",
+									"    pm.expect(json.email).to.eql('admin@myblog.com');",
+									"    pm.expect(json.roles).to.include('Admin');",
+									"});",
+									"",
+									"// Extract jwtToken from Set-Cookie header for variable storage",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('admin_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@myblog.com\",\n    \"password\": \"1234\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						},
+						"description": "POST /api/Auth/login\n\nDTO: LoginRequestDto { Email, Password }\n\nSeeded admin credentials: admin@myblog.com / 1234\n\nOn success: Sets HttpOnly cookie `jwtToken` and returns { email, roles }.\nOn failure: 400 with 'Invalid Email or Password'."
+					}
+				},
+				{
+					"name": "Login — As Reader",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains email and Reader role', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('email');",
+									"    pm.expect(json).to.have.property('roles');",
+									"    pm.expect(json.roles).to.include('Reader');",
+									"});",
+									"",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('reader_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{reader_email}}\",\n    \"password\": \"Reader@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Login — Invalid Credentials (Expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Response says Invalid Email or Password', function () {",
+									"    var body = pm.response.text();",
+									"    pm.expect(body).to.include('Invalid Email or Password');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"nonexistent@test.com\",\n    \"password\": \"wrongpassword\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Get Current User (GET /me) — Admin",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Ensure admin is logged in first.",
+									"// The jwtToken cookie should be present from the Login — As Admin request."
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response contains userId, email, role', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('userId');",
+									"    pm.expect(json).to.have.property('email');",
+									"    pm.expect(json).to.have.property('role');",
+									"    pm.expect(json.role).to.be.a('string').that.is.not.empty;",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"if (json.userId) {",
+									"    pm.collectionVariables.set('admin_user_id', json.userId);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}",
+								"description": "Fallback: manually set cookie if cookie jar isn't populated"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "me"]
+						},
+						"description": "GET /api/Auth/me\n[Authorize]\n\nReturns { userId, email, role } from JWT claims.\nRequires valid jwtToken cookie."
+					}
+				},
+				{
+					"name": "Logout",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response confirms logout', function () {",
+									"    var body = pm.response.text();",
+									"    pm.expect(body).to.include('Logged out successfully');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "logout"]
+						},
+						"description": "POST /api/Auth/logout\n\nClears the jwtToken HttpOnly cookie by setting it to empty with an expired date."
+					}
+				}
+			]
+		},
+		{
+			"name": "Categories",
+			"description": "CRUD operations for blog categories.\n\nNo [Authorize] attributes on this controller — all endpoints are publicly accessible.\n\nDTO fields: Name, UrlHandle (both string, no FluentValidation rules).",
+			"item": [
+				{
+					"name": "Create Category",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has category with id, name, urlHandle', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('name');",
+									"    pm.expect(json).to.have.property('urlHandle');",
+									"    pm.expect(json.name).to.eql('Technology');",
+									"    pm.expect(json.urlHandle).to.eql('technology');",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('category_id', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Technology\",\n    \"urlHandle\": \"technology\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Categories",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories"]
+						},
+						"description": "POST /api/Categories\n\nDTO: CreateCategoryRequestDto { Name, UrlHandle }\nReturns: CategoryDto { Id, Name, UrlHandle }"
+					}
+				},
+				{
+					"name": "Get All Categories",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.be.an('array');",
+									"});",
+									"",
+									"pm.test('Each category has id, name, urlHandle', function () {",
+									"    var json = pm.response.json();",
+									"    if (json.length > 0) {",
+									"        pm.expect(json[0]).to.have.property('id');",
+									"        pm.expect(json[0]).to.have.property('name');",
+									"        pm.expect(json[0]).to.have.property('urlHandle');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Categories",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories"]
+						},
+						"description": "GET /api/Categories\n\nReturns: List<CategoryDto>"
+					}
+				},
+				{
+					"name": "Get Category by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has correct category', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('name');",
+									"    pm.expect(json).to.have.property('urlHandle');",
+									"    pm.expect(json.id).to.eql(pm.collectionVariables.get('category_id'));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Categories/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories", "{{category_id}}"]
+						},
+						"description": "GET /api/Categories/{id:guid}\n\nReturns: CategoryDto or 404 NotFound"
+					}
+				},
+				{
+					"name": "Get Category by ID — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Categories/00000000-0000-0000-0000-000000000000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories", "00000000-0000-0000-0000-000000000000"]
+						}
+					}
+				},
+				{
+					"name": "Update Category",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 204 No Content', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Tech & Innovation\",\n    \"urlHandle\": \"tech-and-innovation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Categories/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories", "{{category_id}}"]
+						},
+						"description": "PUT /api/Categories/{id:guid}\n\nDTO: UpdateCategoryRequestDto { Name, UrlHandle }\nReturns: 204 NoContent on success, 404 NotFound if not found"
+					}
+				},
+				{
+					"name": "Delete Category",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 204 No Content', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Categories/{{category_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories", "{{category_id}}"]
+						},
+						"description": "DELETE /api/Categories/{id:guid}\n\nReturns: 204 NoContent on success, 404 NotFound if not found"
+					}
+				},
+				{
+					"name": "Create Category — For Post Tests",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('category_id', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Web Development\",\n    \"urlHandle\": \"web-development\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Categories",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories"]
+						},
+						"description": "Re-creates a category so the Posts folder has a valid category_id to work with."
+					}
+				}
+			]
+		},
+		{
+			"name": "Posts",
+			"description": "Blog post CRUD including soft-delete, restore, hard-delete, stats, and paginated listing.\n\nFluentValidation rules (both Create and Update):\n- Title: NotEmpty → 'Title is required.'\n- Content: NotEmpty → 'Content is required.'\n- UrlHandle: NotEmpty → 'UrlHandle is required.'\n- Author: NotEmpty → 'Author is required.'\n\nMost write endpoints require [Authorize(Roles = \"Admin\")].",
+			"item": [
+				{
+					"name": "Login as Admin (Pre-step)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Admin login successful', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('admin_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@myblog.com\",\n    \"password\": \"1234\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Create Blog Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has complete blog post schema', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('title');",
+									"    pm.expect(json).to.have.property('content');",
+									"    pm.expect(json).to.have.property('publishedDate');",
+									"    pm.expect(json).to.have.property('description');",
+									"    pm.expect(json).to.have.property('author');",
+									"    pm.expect(json).to.have.property('featuredImgUrl');",
+									"    pm.expect(json).to.have.property('urlHandle');",
+									"    pm.expect(json).to.have.property('isVisible');",
+									"    pm.expect(json).to.have.property('isDeleted');",
+									"    pm.expect(json).to.have.property('viewCount');",
+									"    pm.expect(json).to.have.property('categories');",
+									"    pm.expect(json.title).to.eql('Getting Started with Angular 18');",
+									"    pm.expect(json.isDeleted).to.eql(false);",
+									"    pm.expect(json.viewCount).to.eql(0);",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('post_id', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Getting Started with Angular 18\",\n    \"content\": \"Angular 18 introduces a host of powerful features including signal-based components, improved SSR with hydration, and a new control flow syntax. This comprehensive guide walks you through setting up your first Angular 18 project with best practices for modern web development.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"A comprehensive guide to building modern web apps with Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://example.com/images/angular-18.jpg\",\n    \"urlHandle\": \"getting-started-with-angular-18\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "POST /api/BlogPosts\n[Authorize(Roles = \"Admin\")]\n\nDTO: CreateBlogPostRequestDto\n- Title (string) — FluentValidation: NotEmpty\n- Content (string) — FluentValidation: NotEmpty\n- PublishedDate (DateTime)\n- Description (string)\n- Author (string) — FluentValidation: NotEmpty\n- FeaturedImgUrl (string)\n- UrlHandle (string) — FluentValidation: NotEmpty\n- IsVisible (bool)\n- CategoryIds (List<Guid>)\n\nReturns: BlogPostDto"
+					}
+				},
+				{
+					"name": "Get All Blog Posts (Public — Paginated)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has paged result schema', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('items');",
+									"    pm.expect(json).to.have.property('totalCount');",
+									"    pm.expect(json).to.have.property('currentPage');",
+									"    pm.expect(json).to.have.property('pageSize');",
+									"    pm.expect(json.items).to.be.an('array');",
+									"    pm.expect(json.currentPage).to.eql(1);",
+									"    pm.expect(json.pageSize).to.eql(10);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts?page=1&pageSize=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "GET /api/BlogPosts\n[AllowAnonymous]\n\nQuery params: query? (string), page (int, default 1), pageSize (int, default 10, max 50)\n\nReturns only IsVisible=true AND IsDeleted=false posts.\nReturns: PagedResultDto<BlogPostDto> { Items, TotalCount, CurrentPage, PageSize }"
+					}
+				},
+				{
+					"name": "Get All Blog Posts — With Search Query",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has paged result', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('items');",
+									"    pm.expect(json.items).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts?query=Angular&page=1&pageSize=5",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"],
+							"query": [
+								{
+									"key": "query",
+									"value": "Angular"
+								},
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "5"
+								}
+							]
+						}
+					}
+				},
+				{
+					"name": "Get All Admin Blog Posts (Admin — Includes Drafts & Deleted)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has paged result schema', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('items');",
+									"    pm.expect(json).to.have.property('totalCount');",
+									"    pm.expect(json.items).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/admin?page=1&pageSize=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "admin"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "pageSize",
+									"value": "10"
+								}
+							]
+						},
+						"description": "GET /api/BlogPosts/admin\n[Authorize(Roles = \"Admin\")]\n\nReturns ALL posts including drafts (IsVisible=false) and soft-deleted (IsDeleted=true)."
+					}
+				},
+				{
+					"name": "Get Blog Post by ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has full blog post with readingTimeMinutes', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('title');",
+									"    pm.expect(json).to.have.property('readingTimeMinutes');",
+									"    pm.expect(json).to.have.property('viewCount');",
+									"    pm.expect(json).to.have.property('categories');",
+									"    pm.expect(json.readingTimeMinutes).to.be.a('number');",
+									"    pm.expect(json.readingTimeMinutes).to.be.at.least(1);",
+									"    pm.expect(json.viewCount).to.be.at.least(1);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						},
+						"description": "GET /api/BlogPosts/{id}\n\nNo auth required. Increments ViewCount. Calculates ReadingTimeMinutes dynamically (200 wpm, min 1).\nReturns: BlogPostDto with categories, readingTimeMinutes, viewCount."
+					}
+				},
+				{
+					"name": "Get Blog Post by URL Handle",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response matches the url handle', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('urlHandle');",
+									"    pm.expect(json.urlHandle).to.eql('getting-started-with-angular-18');",
+									"    pm.expect(json).to.have.property('readingTimeMinutes');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/urlHandle/getting-started-with-angular-18",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "urlHandle", "getting-started-with-angular-18"]
+						},
+						"description": "GET /api/BlogPosts/urlHandle/{urlHandle}\n[AllowAnonymous]\n\nLookup by URL-friendly slug. Increments ViewCount."
+					}
+				},
+				{
+					"name": "Update Blog Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has updated title', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.title).to.eql('Angular 18 — The Complete Developer Guide');",
+									"    pm.expect(json.author).to.eql('Navid Munshi');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Angular 18 — The Complete Developer Guide\",\n    \"content\": \"Updated content with new sections on signals, deferrable views, and the built-in control flow. Angular 18 brings a paradigm shift in how we build reactive applications.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Updated comprehensive guide to Angular 18\",\n    \"author\": \"Navid Munshi\",\n    \"featuredImgUrl\": \"https://example.com/images/angular-18-v2.jpg\",\n    \"urlHandle\": \"angular-18-complete-guide\",\n    \"isVisible\": true,\n    \"categoryIds\": [\"{{category_id}}\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						},
+						"description": "PUT /api/BlogPosts/{id}\n[Authorize(Roles = \"Admin\")]\n\nDTO: UpdateBlogPostRequestDto (same fields as Create)\nFluentValidation: Title, Content, UrlHandle, Author — all NotEmpty.\nReturns: updated BlogPostDto or 404."
+					}
+				},
+				{
+					"name": "Get Dashboard Stats",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has dashboard stats schema', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('totalPosts');",
+									"    pm.expect(json).to.have.property('publishedPosts');",
+									"    pm.expect(json).to.have.property('draftPosts');",
+									"    pm.expect(json).to.have.property('deletedPosts');",
+									"    pm.expect(json.totalPosts).to.be.a('number');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "stats"]
+						},
+						"description": "GET /api/BlogPosts/stats\n[Authorize(Roles = \"Admin\")]\n\nReturns: DashboardStatsDto { TotalPosts, PublishedPosts, DraftPosts, DeletedPosts }"
+					}
+				},
+				{
+					"name": "Soft-Delete Blog Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 204 No Content', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						},
+						"description": "DELETE /api/BlogPosts/{id}\n[Authorize(Roles = \"Admin\")]\n\nSets IsDeleted=true (soft delete). Returns 204 NoContent or 404."
+					}
+				},
+				{
+					"name": "Restore Soft-Deleted Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/restore/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "restore", "{{post_id}}"]
+						},
+						"description": "PUT /api/BlogPosts/restore/{id:Guid}\n[Authorize(Roles = \"Admin\")]\n\nSets IsDeleted=false. Returns 200 OK or 404."
+					}
+				},
+				{
+					"name": "Hard-Delete Blog Post",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/hard-delete/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "hard-delete", "{{post_id}}"]
+						},
+						"description": "DELETE /api/BlogPosts/hard-delete/{id:Guid}\n[Authorize(Roles = \"Admin\")]\n\nPermanently removes the post from the database. Returns 200 OK or 404."
+					}
+				}
+			]
+		},
+		{
+			"name": "Images",
+			"description": "Image upload and listing.\n\nNo [Authorize] on this controller.\nUpload uses [FromForm] multipart/form-data.\n\nDTO: ImageUploadRequestDto { File (IFormFile), FileName (string), Title (string) }",
+			"item": [
+				{
+					"name": "Upload Image",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// NOTE: This test requires manual file selection in Postman.",
+									"// Select a .jpg/.png/.gif file in the 'File' form-data field before sending.",
+									"// Status code assertion is skipped because the test will fail without a file.",
+									"",
+									"pm.test('Response time is less than 5000ms', function () {",
+									"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+									"});",
+									"",
+									"if (pm.response.code === 200) {",
+									"    var json = pm.response.json();",
+									"    if (json.url) {",
+									"        pm.collectionVariables.set('image_id', json.url);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "File",
+									"type": "file",
+									"src": "",
+									"description": "Select any .jpg/.png/.gif image file from your machine"
+								},
+								{
+									"key": "FileName",
+									"value": "test-blog-image",
+									"type": "text"
+								},
+								{
+									"key": "Title",
+									"value": "Test Blog Featured Image",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Images/upload",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Images", "upload"]
+						},
+						"description": "POST /api/Images/upload\n[FromForm]\n\nDTO: ImageUploadRequestDto { File (IFormFile), FileName (string), Title (string) }\n\nValidation in controller: File cannot be null and File.Length must be > 0.\nReturns: { url: string } — the HTTPS URL to the uploaded image."
+					}
+				},
+				{
+					"name": "Upload Image — No File (Expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "FileName",
+									"value": "no-file-test",
+									"type": "text"
+								},
+								{
+									"key": "Title",
+									"value": "Missing File Test",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Images/upload",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Images", "upload"]
+						}
+					}
+				},
+				{
+					"name": "Get All Images",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array of images', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.be.an('array');",
+									"    if (json.length > 0) {",
+									"        pm.expect(json[0]).to.have.property('id');",
+									"        pm.expect(json[0]).to.have.property('fileName');",
+									"        pm.expect(json[0]).to.have.property('title');",
+									"        pm.expect(json[0]).to.have.property('fileExtension');",
+									"        pm.expect(json[0]).to.have.property('fileSizeInBytes');",
+									"        pm.expect(json[0]).to.have.property('url');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Images",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Images"]
+						},
+						"description": "GET /api/Images\n\nReturns: List<BlogImage> { Id, FileName, Title, FileExtension, FileSizeInBytes, Url }"
+					}
+				}
+			]
+		},
+		{
+			"name": "Comments",
+			"description": "Comment creation (requires any auth), listing by post, and deletion (owner or Admin).\n\nDTO: CreateCommentRequestDto { Content [Required], BlogPostId [Required] }\nResponse: CommentDto { Id, Content, BlogPostId, UserId, UserEmail, DateAdded }",
+			"item": [
+				{
+					"name": "Setup — Login as Admin & Create Post for Comments",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Admin login for comment setup', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('admin_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@myblog.com\",\n    \"password\": \"1234\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Setup — Create a Post (for Comment Target)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Post created for comment tests', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('post_id', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Comment Test Post\",\n    \"content\": \"This post exists solely for testing comments functionality.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test post for comments\",\n    \"author\": \"Test Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"comment-test-post\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Add Comment — As Reader",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Login as reader first",
+									"pm.sendRequest({",
+									"    url: pm.collectionVariables.get('base_url') + '/api/Auth/login',",
+									"    method: 'POST',",
+									"    header: { 'Content-Type': 'application/json' },",
+									"    body: {",
+									"        mode: 'raw',",
+									"        raw: JSON.stringify({ email: pm.collectionVariables.get('reader_email'), password: 'Reader@123456' })",
+									"    }",
+									"}, function (err, res) {",
+									"    if (!err) {",
+									"        var setCookie = res.headers.get('Set-Cookie');",
+									"        if (setCookie) {",
+									"            var match = setCookie.match(/jwtToken=([^;]+)/);",
+									"            if (match) {",
+									"                pm.collectionVariables.set('reader_token', match[1]);",
+									"            }",
+									"        }",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response has comment schema', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('id');",
+									"    pm.expect(json).to.have.property('content');",
+									"    pm.expect(json).to.have.property('blogPostId');",
+									"    pm.expect(json).to.have.property('userId');",
+									"    pm.expect(json).to.have.property('userEmail');",
+									"    pm.expect(json).to.have.property('dateAdded');",
+									"    pm.expect(json.content).to.eql('Great article! Very informative and well-written.');",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('comment_id', json.id);",
+									"pm.collectionVariables.set('reader_user_id', json.userId);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Great article! Very informative and well-written.\",\n    \"blogPostId\": \"{{post_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments"]
+						},
+						"description": "POST /api/Comments\n[Authorize] (any authenticated user)\n\nDTO: CreateCommentRequestDto\n- Content [Required] (DataAnnotation)\n- BlogPostId [Required] (DataAnnotation)\n\nUserId and UserEmail are extracted from JWT claims automatically.\nReturns: CommentDto"
+					}
+				},
+				{
+					"name": "Get Comments by Blog Post ID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 200 OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test('Response is an array of comments', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.be.an('array');",
+									"    if (json.length > 0) {",
+									"        pm.expect(json[0]).to.have.property('id');",
+									"        pm.expect(json[0]).to.have.property('content');",
+									"        pm.expect(json[0]).to.have.property('blogPostId');",
+									"        pm.expect(json[0]).to.have.property('userId');",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Comments/post/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments", "post", "{{post_id}}"]
+						},
+						"description": "GET /api/Comments/post/{blogPostId:guid}\n\nNo auth required. Returns all comments for a given blog post."
+					}
+				},
+				{
+					"name": "Delete Comment — By Owner (Reader)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 204 No Content', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Comments/{{comment_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments", "{{comment_id}}"]
+						},
+						"description": "DELETE /api/Comments/{id:guid}\n[Authorize]\n\nOwner check: comment.UserId must match current user's ClaimTypes.NameIdentifier.\nAdmins can delete any comment.\nReturns: 204 NoContent, 404 NotFound, or 403 Forbid."
+					}
+				},
+				{
+					"name": "Setup — Re-add Comment (for Admin Delete Test)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Comment re-created', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var json = pm.response.json();",
+									"pm.collectionVariables.set('comment_id', json.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Another comment for admin deletion test.\",\n    \"blogPostId\": \"{{post_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments"]
+						}
+					}
+				},
+				{
+					"name": "Delete Comment — By Admin (Not Owner)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 204 No Content', function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Comments/{{comment_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments", "{{comment_id}}"]
+						},
+						"description": "Admin can delete any comment regardless of ownership — verified by User.IsInRole(\"Admin\") check in CommentsController."
+					}
+				},
+				{
+					"name": "Delete Comment — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Comments/00000000-0000-0000-0000-000000000000",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments", "00000000-0000-0000-0000-000000000000"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Authorization & Role Tests",
+			"description": "Tests verifying that role-based access control works correctly:\n- Reader hitting Admin-only endpoints → 403\n- No cookie → 401\n- Tampered/expired token → 401",
+			"item": [
+				{
+					"name": "Setup — Login as Reader",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Reader login OK', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('reader_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"{{reader_email}}\",\n    \"password\": \"Reader@123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Reader → Create Post (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Unauthorized Post\",\n    \"content\": \"This should fail because Reader cannot create posts.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Should fail\",\n    \"author\": \"Reader User\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"unauthorized-post\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "POST /api/BlogPosts requires [Authorize(Roles = \"Admin\")].\nReader role should get 403 Forbidden."
+					}
+				},
+				{
+					"name": "Reader → Delete Post (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						},
+						"description": "DELETE /api/BlogPosts/{id} requires [Authorize(Roles = \"Admin\")]."
+					}
+				},
+				{
+					"name": "Reader → Update Post (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Trying to Update\",\n    \"content\": \"Reader cannot update posts.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Should fail\",\n    \"author\": \"Reader\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"fail-update\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Reader → Get Admin Posts (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/admin",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "admin"]
+						},
+						"description": "GET /api/BlogPosts/admin requires [Authorize(Roles = \"Admin\")]."
+					}
+				},
+				{
+					"name": "Reader → Get Dashboard Stats (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/stats",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "stats"]
+						}
+					}
+				},
+				{
+					"name": "Reader → Restore Post (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/restore/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "restore", "{{post_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Reader → Hard-Delete Post (Expect 403)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/hard-delete/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "hard-delete", "{{post_id}}"]
+						}
+					}
+				},
+				{
+					"name": "No Cookie → GET /me (Expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function () {",
+									"    pm.expect([401, 403]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "me"]
+						},
+						"description": "GET /api/Auth/me requires [Authorize].\nNo jwtToken cookie → 401."
+					}
+				},
+				{
+					"name": "No Cookie → Create Post (Expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function () {",
+									"    pm.expect([401, 403]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"No Auth Post\",\n    \"content\": \"Should fail.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"No auth\",\n    \"author\": \"Nobody\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"no-auth\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "No Cookie → Create Comment (Expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function () {",
+									"    pm.expect([401, 403]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Unauthorized comment\",\n    \"blogPostId\": \"{{post_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments"]
+						}
+					}
+				},
+				{
+					"name": "Tampered Token → GET /me (Expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function () {",
+									"    pm.expect([401, 403]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0YW1wZXJlZCIsImVtYWlsIjoiZmFrZUB0ZXN0LmNvbSIsInJvbGUiOiJBZG1pbiIsImV4cCI6OTk5OTk5OTk5OX0.TAMPERED_SIGNATURE_INVALID"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "me"]
+						},
+						"description": "Sends a JWT with an invalid signature. The server validates IssuerSigningKey, so this should return 401."
+					}
+				},
+				{
+					"name": "Tampered Token → Create Post (Expect 401)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 401 or 403', function () {",
+									"    pm.expect([401, 403]).to.include(pm.response.code);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0YW1wZXJlZCIsImVtYWlsIjoiZmFrZUB0ZXN0LmNvbSIsInJvbGUiOiJBZG1pbiIsImV4cCI6OTk5OTk5OTk5OX0.TAMPERED_INVALID_SIG"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Tampered Token Post\",\n    \"content\": \"Should fail.\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Tampered\",\n    \"author\": \"Hacker\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"tampered\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Unauthorized Comment Delete (Reader deleting another's comment → 403)",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// First, login as admin and create a comment",
+									"pm.sendRequest({",
+									"    url: pm.collectionVariables.get('base_url') + '/api/Auth/login',",
+									"    method: 'POST',",
+									"    header: { 'Content-Type': 'application/json' },",
+									"    body: {",
+									"        mode: 'raw',",
+									"        raw: JSON.stringify({ email: 'admin@myblog.com', password: '1234' })",
+									"    }",
+									"}, function (err, loginRes) {",
+									"    if (!err) {",
+									"        var setCookie = loginRes.headers.get('Set-Cookie');",
+									"        var adminJwt = '';",
+									"        if (setCookie) {",
+									"            var match = setCookie.match(/jwtToken=([^;]+)/);",
+									"            if (match) adminJwt = match[1];",
+									"        }",
+									"        // Create comment as admin",
+									"        pm.sendRequest({",
+									"            url: pm.collectionVariables.get('base_url') + '/api/Comments',",
+									"            method: 'POST',",
+									"            header: {",
+									"                'Content-Type': 'application/json',",
+									"                'Cookie': 'jwtToken=' + adminJwt",
+									"            },",
+									"            body: {",
+									"                mode: 'raw',",
+									"                raw: JSON.stringify({",
+									"                    content: 'Admin comment that reader cannot delete',",
+									"                    blogPostId: pm.collectionVariables.get('post_id')",
+									"                })",
+									"            }",
+									"        }, function (err2, commentRes) {",
+									"            if (!err2) {",
+									"                var commentJson = commentRes.json();",
+									"                pm.collectionVariables.set('comment_id', commentJson.id);",
+									"            }",
+									"        });",
+									"    }",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 403 Forbidden', function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{reader_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/Comments/{{comment_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments", "{{comment_id}}"]
+						},
+						"description": "Reader tries to delete a comment owned by Admin.\nCommentsController checks: comment.UserId != currentUserId && !User.IsInRole(\"Admin\") → Forbid()"
+					}
+				}
+			]
+		},
+		{
+			"name": "Negative & Validation Tests",
+			"description": "Tests derived directly from FluentValidation rules and DataAnnotation [Required] attributes.\n\nFluentValidation (CreateBlogPostRequestValidator & UpdateBlogPostRequestValidator):\n- Title: NotEmpty → 'Title is required.'\n- Content: NotEmpty → 'Content is required.'\n- UrlHandle: NotEmpty → 'UrlHandle is required.'\n- Author: NotEmpty → 'Author is required.'\n\nDataAnnotation on RegisterRequestDto: Email [Required], Password [Required]\nDataAnnotation on CreateCommentRequestDto: Content [Required], BlogPostId [Required]\n\nIdentity password policy: RequiredLength=6, no complexity rules.",
+			"item": [
+				{
+					"name": "Setup — Login as Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Admin login for validation tests', function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"var setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"if (setCookieHeader) {",
+									"    var match = setCookieHeader.match(/jwtToken=([^;]+)/);",
+									"    if (match) {",
+									"        pm.collectionVariables.set('admin_token', match[1]);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@myblog.com\",\n    \"password\": \"1234\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — Missing Title (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Title', function () {",
+									"    var json = pm.response.json();",
+									"    var body = JSON.stringify(json);",
+									"    pm.expect(body).to.include('Title');",
+									"    pm.expect(body).to.include('required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"\",\n    \"content\": \"Valid content here\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Test Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "FluentValidation rule: RuleFor(x => x.Title).NotEmpty().WithMessage(\"Title is required.\");"
+					}
+				},
+				{
+					"name": "Create Post — Missing Content (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Content', function () {",
+									"    var json = pm.response.json();",
+									"    var body = JSON.stringify(json);",
+									"    pm.expect(body).to.include('Content');",
+									"    pm.expect(body).to.include('required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Test Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — Missing UrlHandle (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions UrlHandle', function () {",
+									"    var json = pm.response.json();",
+									"    var body = JSON.stringify(json);",
+									"    pm.expect(body).to.include('UrlHandle');",
+									"    pm.expect(body).to.include('required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Test Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — Missing Author (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Author', function () {",
+									"    var json = pm.response.json();",
+									"    var body = JSON.stringify(json);",
+									"    pm.expect(body).to.include('Author');",
+									"    pm.expect(body).to.include('required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — All 4 Required Fields Empty (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('All four validation errors present', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Title is required');",
+									"    pm.expect(body).to.include('Content is required');",
+									"    pm.expect(body).to.include('UrlHandle is required');",
+									"    pm.expect(body).to.include('Author is required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"\",\n    \"content\": \"\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"\",\n    \"author\": \"\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"\",\n    \"isVisible\": false,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "Triggers all 4 FluentValidation rules simultaneously:\n- Title is required.\n- Content is required.\n- UrlHandle is required.\n- Author is required."
+					}
+				},
+				{
+					"name": "Update Post — Missing Title (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Title', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Title');",
+									"    pm.expect(body).to.include('required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Update Post — All 4 Required Fields Empty (FluentValidation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('All four validation errors present', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Title is required');",
+									"    pm.expect(body).to.include('Content is required');",
+									"    pm.expect(body).to.include('UrlHandle is required');",
+									"    pm.expect(body).to.include('Author is required');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"\",\n    \"content\": \"\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"\",\n    \"author\": \"\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"\",\n    \"isVisible\": false,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/{{post_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "{{post_id}}"]
+						}
+					}
+				},
+				{
+					"name": "Register — Missing Email ([Required] DataAnnotation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Email', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Email');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"password\": \"ValidPass123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Register — Missing Password ([Required] DataAnnotation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Password', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Password');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"test@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Register — Password Too Short (Identity: min 6 chars)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Identity error about password length', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('PasswordTooShort');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"shortpw@codepulse.com\",\n    \"password\": \"abc\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						},
+						"description": "Identity config: options.Password.RequiredLength = 6\nSending a 3-character password should trigger PasswordTooShort error."
+					}
+				},
+				{
+					"name": "Register — Empty Body",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Auth", "register"]
+						}
+					}
+				},
+				{
+					"name": "Create Comment — Missing Content ([Required] DataAnnotation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions Content', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('Content');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"blogPostId\": \"{{post_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments"]
+						}
+					}
+				},
+				{
+					"name": "Create Comment — Missing BlogPostId ([Required] DataAnnotation)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});",
+									"",
+									"pm.test('Validation error mentions BlogPostId', function () {",
+									"    var body = JSON.stringify(pm.response.json());",
+									"    pm.expect(body).to.include('BlogPostId');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"content\": \"Comment without a target post\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/Comments",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Comments"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — Invalid JSON Body",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{ this is not valid json }"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "Sending malformed JSON to test ASP.NET model binding error handling."
+					}
+				},
+				{
+					"name": "Create Post — Wrong Type for PublishedDate",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"not-a-date\",\n    \"description\": \"Test\",\n    \"author\": \"Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						},
+						"description": "PublishedDate is DateTime — sending a non-date string should trigger model binding error."
+					}
+				},
+				{
+					"name": "Create Post — Wrong Type for IsVisible (string instead of bool)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": \"not-a-bool\",\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Create Post — Wrong Type for CategoryIds (string instead of array)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 400 Bad Request', function () {",
+									"    pm.response.to.have.status(400);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Valid Title\",\n    \"content\": \"Valid content\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"Test\",\n    \"author\": \"Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"valid-handle\",\n    \"isVisible\": true,\n    \"categoryIds\": \"not-an-array\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts"]
+						}
+					}
+				},
+				{
+					"name": "Get Post by ID — Not Found (Expect 500 from Exception)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// BlogPostRepository.GetBlogPostByIdAsync throws Exception('Blog post not found.')",
+									"// which is caught by GlobalExceptionHandler and returns 500",
+									"pm.test('Status code is 500 Internal Server Error', function () {",
+									"    pm.response.to.have.status(500);",
+									"});",
+									"",
+									"pm.test('Error message indicates not found', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json).to.have.property('message');",
+									"    pm.expect(json.message).to.include('Blog post not found');",
+									"    pm.expect(json).to.have.property('statusCode');",
+									"    pm.expect(json.statusCode).to.eql(500);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/00000000-0000-0000-0000-000000000099",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "00000000-0000-0000-0000-000000000099"]
+						},
+						"description": "BlogPostRepository throws generic Exception('Blog post not found.') when ID doesn't exist.\nGlobalExceptionHandler catches this → maps unhandled Exception to 500.\nResponse: { message: 'Blog post not found.', statusCode: 500 }"
+					}
+				},
+				{
+					"name": "Get Post by URL Handle — Not Found (Expect 500 from Exception)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 500 Internal Server Error', function () {",
+									"    pm.response.to.have.status(500);",
+									"});",
+									"",
+									"pm.test('Error message indicates not found', function () {",
+									"    var json = pm.response.json();",
+									"    pm.expect(json.message).to.include('Blog post not found');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/urlHandle/this-handle-does-not-exist-at-all",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "urlHandle", "this-handle-does-not-exist-at-all"]
+						}
+					}
+				},
+				{
+					"name": "Delete Post — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/00000000-0000-0000-0000-000000000099",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "00000000-0000-0000-0000-000000000099"]
+						}
+					}
+				},
+				{
+					"name": "Restore Post — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/restore/00000000-0000-0000-0000-000000000099",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "restore", "00000000-0000-0000-0000-000000000099"]
+						}
+					}
+				},
+				{
+					"name": "Hard-Delete Post — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/hard-delete/00000000-0000-0000-0000-000000000099",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "hard-delete", "00000000-0000-0000-0000-000000000099"]
+						}
+					}
+				},
+				{
+					"name": "Update Post — Not Found (Expect 404)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test('Status code is 404 Not Found', function () {",
+									"    pm.response.to.have.status(404);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "jwtToken={{admin_token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"This will 404\",\n    \"content\": \"Because post doesn't exist\",\n    \"publishedDate\": \"2026-06-12T00:00:00Z\",\n    \"description\": \"None\",\n    \"author\": \"Author\",\n    \"featuredImgUrl\": \"\",\n    \"urlHandle\": \"does-not-exist\",\n    \"isVisible\": true,\n    \"categoryIds\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/BlogPosts/00000000-0000-0000-0000-000000000099",
+							"host": ["{{base_url}}"],
+							"path": ["api", "BlogPosts", "00000000-0000-0000-0000-000000000099"]
+						}
+					}
+				},
+				{
+					"name": "Invalid GUID in Route — Category (Expect 400)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Route constraint {id:guid} will reject non-GUID values",
+									"pm.test('Status code is 400 or 404', function () {",
+									"    pm.expect(pm.response.code).to.be.oneOf([400, 404]);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/Categories/not-a-valid-guid",
+							"host": ["{{base_url}}"],
+							"path": ["api", "Categories", "not-a-valid-guid"]
+						},
+						"description": "Route constraint is {id:guid} — non-GUID strings won't match, resulting in 400 or 404."
+					}
+				}
+			]
+		}
+	]
+}
